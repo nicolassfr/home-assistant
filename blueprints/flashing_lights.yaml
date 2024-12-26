@@ -1,0 +1,107 @@
+blueprint:
+  name: Clignotement des lumières avec restauration et transition
+  description: Fait clignoter les lumières sélectionnées dans une couleur spécifique et restaure leur état initial, avec support de transition personnalisée.
+  domain: script
+  source_url: https://community.home-assistant.io/t/custom-blinking-lights-blueprint/796494
+
+  input:
+    lights:
+      name: Lumières
+      description: Sélectionnez les lumières à faire clignoter.
+      selector:
+        target:
+          entity:
+          - domain:
+            - light
+
+    color:
+      name: Couleur de clignotement
+      description: Choisissez une couleur pour le clignotement.
+      selector:
+        color_rgb: {}
+
+    blink_count:
+      name: Nombre de clignotements
+      description: Combien de fois les lumières doivent-elles clignoter ?
+      default: 3
+      selector:
+        number:
+          min: 1.0
+          max: 10.0
+          step: 1.0
+          mode: slider
+
+    blink_duration:
+      name: Durée du clignotement (secondes)
+      description: Combien de temps doit durer chaque clignotement ?
+      default: 1
+      selector:
+        number:
+          min: 0.1
+          max: 5.0
+          step: 0.1
+          mode: slider
+
+    flash_with_off:
+      name: Clignotement avec extinction
+      description: Éteindre les lumières entre les clignotements ? Si non coché, les lumières reviendront à leur couleur d'origine entre les clignotements.
+      default: true
+      selector:
+        boolean: {}
+
+    transition_length:
+      name: Durée de transition (secondes)
+      description: Définissez un temps de transition personnalisé pour les lumières (remplace la valeur par défaut du dispositif).
+      default: 0.5
+      selector:
+        number:
+          min: 0.0
+          max: 5.0
+          step: 0.1
+          mode: slider
+
+variables:
+  lights: !input lights
+  blink_count: !input blink_count
+  blink_duration: !input blink_duration
+  color: !input color
+  flash_with_off: !input flash_with_off
+  transition_length: !input transition_length
+
+sequence:
+  - service: scene.create
+    data:
+      scene_id: light_restore_scene
+      snapshot_entities: '{{ lights.entity_id }}'
+
+  - repeat:
+      count: '{{ blink_count }}'
+      sequence:
+        - service: light.turn_on
+          target: '{{ lights }}'
+          data:
+            rgb_color: '{{ color }}'
+            brightness: 255
+            transition: '{{ transition_length }}'
+        - delay: '{{ blink_duration | float }}'
+        - choose:
+            - conditions:
+                - condition: template
+                  value_template: '{{ flash_with_off }}'
+              sequence:
+                - service: light.turn_off
+                  target: '{{ lights }}'
+                  data:
+                    transition: '{{ transition_length }}'
+            - conditions:
+                - condition: template
+                  value_template: '{{ not flash_with_off }}'
+              sequence:
+                - service: scene.turn_on
+                  data:
+                    entity_id: scene.light_restore_scene
+        - delay: '{{ blink_duration | float }}'
+
+  - service: scene.turn_on
+    data:
+      entity_id: scene.light_restore_scene
